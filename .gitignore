@@ -1,0 +1,15 @@
+# XcodeGen 生成物
+ReplyKey.xcodeproj/
+
+# 构建产物
+build/
+DerivedData/
+Payload/
+*.ipa
+*.xcarchive
+
+# macOS
+.DS_Store
+
+# 本地临时
+*.log

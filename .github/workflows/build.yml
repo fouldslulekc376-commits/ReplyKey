@@ -1,0 +1,68 @@
+name: Build IPA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 XcodeGen
+        run: brew install xcodegen
+
+      - name: 写入 API 配置
+        env:
+          API_KEY: ${{ secrets.API_KEY }}
+        run: |
+          BASE_URL="${{ vars.API_BASE_URL }}"
+          MODEL="${{ vars.MODEL }}"
+          BASE_URL="${BASE_URL:-https://api.deepseek.com}"
+          MODEL="${MODEL:-deepseek-chat}"
+          echo "base=$BASE_URL model=$MODEL"
+          cat > Shared/Secrets.swift <<EOF
+          import Foundation
+
+          enum Secrets {
+              static let apiKey = "${API_KEY}"
+              static let baseURL = "${BASE_URL}"
+              static let model = "${MODEL}"
+          }
+          EOF
+
+      - name: 生成 Xcode 工程
+        run: xcodegen generate
+
+      - name: 编译（不签名）
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project ReplyKey.xcodeproj \
+            -target ReplyKey \
+            -configuration Release \
+            -sdk iphoneos \
+            SYMROOT="$PWD/build" \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            | tee build.log | tail -n 40
+
+      - name: 打包成 ipa
+        run: |
+          mkdir -p Payload
+          cp -R build/Release-iphoneos/ReplyKey.app Payload/ReplyKey.app
+          zip -qr ReplyKey.ipa Payload
+          ls -lh ReplyKey.ipa
+          ls Payload/ReplyKey.app/PlugIns
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReplyKey-ipa
+          path: ReplyKey.ipa
